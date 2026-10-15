@@ -1,0 +1,38 @@
+# 🤖 Gemini 로 유튜브 영상 보기: 영상 받기 없이 구글이 직접 봄 → results 가지 {영상ID}/summary.md, charts.json
+# 필요: 비밀값 GEMINI_API_KEY (aistudio.google.com 무료 키)
+name: watch
+on:
+  workflow_dispatch:
+    inputs:
+      vid:
+        description: "유튜브 영상 ID 또는 주소"
+        required: true
+permissions:
+  contents: write
+concurrency: grab
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests
+      - name: 영상 ID
+        run: |
+          V=$(python -c "import re,sys;s=sys.argv[1];m=re.search(r'(?:v=|youtu\.be/|shorts/|live/)([\w-]{11})',s);print(m.group(1) if m else s.strip())" "${{ inputs.vid }}")
+          echo "VID=$V" >> "$GITHUB_ENV"
+      - name: Gemini 로 보기
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python gemini_watch.py "$VID" "out/$VID"
+      - name: 올리기
+        run: |
+          git fetch origin results && git checkout -q -B results FETCH_HEAD || git checkout -q --orphan results
+          git rm -rq --cached . 2>/dev/null || true
+          mkdir -p "$VID"; cp out/$VID/* "$VID"/
+          git add "$VID"
+          git -c user.name=grab-bot -c user.email=grab@users.noreply.github.com commit -qm "🤖 $VID gemini"
+          git push -q origin results
