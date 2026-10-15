@@ -19,7 +19,7 @@ for fn, prompt in PROMPTS.items():
             "generationConfig": {"temperature": 0.2, "maxOutputTokens": 32768}}
     if fn.endswith(".json"):
         body["generationConfig"]["responseMimeType"] = "application/json"
-    for model in ("gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"):
+    for model in ("gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-pro-preview"):
         r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={KEY}",
                           json=body, timeout=900)
         print(fn, model, r.status_code)

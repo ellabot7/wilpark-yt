@@ -32,7 +32,7 @@ jobs:
         run: |
           git fetch origin results && git checkout -q -B results FETCH_HEAD || git checkout -q --orphan results
           git rm -rq --cached . 2>/dev/null || true
-          mkdir -p "$VID"; cp out/$VID/* "$VID"/
+          mkdir -p "$VID"; cp out/$VID/* "$VID"/ 2>/dev/null || { echo "결과 없음"; exit 1; }
           git add "$VID"
           git -c user.name=grab-bot -c user.email=grab@users.noreply.github.com commit -qm "🤖 $VID gemini"
           git push -q origin results
