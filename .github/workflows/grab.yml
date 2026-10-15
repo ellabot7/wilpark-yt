@@ -36,13 +36,27 @@ jobs:
         run: |
           U="https://www.youtube.com/watch?v=$VID"
           C="--cookies $RUNNER_TEMP/c.txt"; [ -s "$RUNNER_TEMP/c.txt" ] || C=""
-          yt-dlp $C -F "$U" | tail -20 || true
-          yt-dlp $C -f "bv*[height<=1440]/bv*/b" -o "video.%(ext)s" "$U"
           yt-dlp $C --skip-download --write-subs --write-auto-subs --sub-langs "ko,ko-orig,ko.*" --sub-format vtt -o "subs" "$U" || true
           yt-dlp $C --skip-download --dump-json "$U" > meta_full.json || true
+          # 화질 좋은 것부터: 여러 접속 방식(쿠키 있음/없음)을 차례로 시도
+          for cl in "" "web_safari" "tv" "mweb" "web_embedded" "android_vr" "ios"; do
+            for ck in "$C" ""; do
+              EA=""; [ -n "$cl" ] && EA="--extractor-args youtube:player_client=$cl"
+              echo "== 시도: client=${cl:-기본} 쿠키=${ck:+있음}"
+              yt-dlp $ck $EA -f "bv*[height>=720][height<=1440]/bv*[height>=720]" -o "video.%(ext)s" "$U" && break 2
+              rm -f video.*
+            done
+          done
+          if ! ls video.* >/dev/null 2>&1; then
+            echo "== 720p 이상 실패 → 받을 수 있는 아무 화질"
+            yt-dlp $C -f "bv*/b" -o "video.%(ext)s" "$U" || yt-dlp -f "bv*/b" -o "video.%(ext)s" "$U" || true
+          fi
           ls -la
+          ls video.* >/dev/null 2>&1 && ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 video.* || echo "영상 못 받음"
       - name: 캡처
-        run: python frames.py "$VID" "out/$VID"
+        run: |
+          mkdir -p "out/$VID"
+          if ls video.* >/dev/null 2>&1; then python frames.py "$VID" "out/$VID"; else echo "영상 없음 - 자막만"; fi
       - name: 정리
         run: |
           S=$(ls subs*.vtt 2>/dev/null | grep -m1 orig || ls subs*.vtt 2>/dev/null | head -1)
