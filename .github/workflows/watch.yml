@@ -7,6 +7,9 @@ on:
       vid:
         description: "유튜브 영상 ID 또는 주소"
         required: true
+      only:
+        description: "이것만 다시 (예: charts.json), 비우면 전부"
+        default: ""
 permissions:
   contents: write
 concurrency: grab
@@ -27,6 +30,7 @@ jobs:
       - name: Gemini 로 보기
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ONLY: ${{ inputs.only }}
         run: python gemini_watch.py "$VID" "out/$VID"
       - name: 올리기
         run: |

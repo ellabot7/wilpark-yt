@@ -14,12 +14,18 @@ PROMPTS = {
     "charts.json": """이 영상에서 화면에 주식 차트가 보이는 장면을 모두 찾아 줘. 같은 차트가 계속 보이면 한 번만, 종목·주기·확대가 바뀌면 새로.
 JSON 배열만 출력: [{"t":"분:초","end":"분:초","name":"종목/지수 이름","code":"종목코드(보이면)","period":"1분봉/3분봉/일봉/주봉 등","what":"차트에 보이는 것(이평선 색, 추세선, B/S 표시, 박스, 화살표 등) 한 줄","said":"그때 윌팍이 한 말 요지 한 줄","good":true/false (고수 차트 공부 자료로 볼 만한지)}]""",
 }
+ONLY = os.environ.get("ONLY", "")
 for fn, prompt in PROMPTS.items():
+    if ONLY and fn not in ONLY.split(","):
+        continue
     body = {"contents": [{"parts": [{"file_data": {"file_uri": URL}}, {"text": prompt}]}],
             "generationConfig": {"temperature": 0.2, "maxOutputTokens": 32768}}
     if fn.endswith(".json"):
         body["generationConfig"]["responseMimeType"] = "application/json"
-    for model in ("gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-pro-preview"):
+    done = False
+    for model in [m for _ in range(4) for m in ("gemini-3.8-flash", "gemini-flash-latest")]:  # 붐비면(503) 쉬었다 다시
+        if done:
+            break
         r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={KEY}",
                           json=body, timeout=900)
         print(fn, model, r.status_code)
@@ -29,5 +35,6 @@ for fn, prompt in PROMPTS.items():
             except Exception as e:
                 print("응답 이상", e, r.text[:500]); continue
             open(f"{out}/{fn}", "w", encoding="utf-8").write(txt)
-            break
-        print(r.text[:800]); time.sleep(5)
+            done = True
+            continue
+        print(r.text[:300]); time.sleep(60)
