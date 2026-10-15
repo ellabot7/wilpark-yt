@@ -1,0 +1,58 @@
+# 🎬 유튜브 영상 한 편: 자막 + 최고 화질로 화면 바뀌는 장면 캡처 → results 가지 {영상ID}/
+# 실행: Actions → grab → Run workflow → vid 에 영상 ID 또는 주소
+name: grab
+on:
+  workflow_dispatch:
+    inputs:
+      vid:
+        description: "유튜브 영상 ID 또는 주소"
+        required: true
+permissions:
+  contents: write
+concurrency: grab
+jobs:
+  grab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -q "yt-dlp[default]" numpy pillow
+      - uses: denoland/setup-deno@v2
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: 영상 ID
+        run: |
+          V="${{ inputs.vid }}"
+          V=$(python -c "import re,sys;s=sys.argv[1];m=re.search(r'(?:v=|youtu\.be/|shorts/|live/)([\w-]{11})',s);print(m.group(1) if m else s.strip())" "$V")
+          echo "VID=$V" >> "$GITHUB_ENV"; echo "$V"
+      - name: 쿠키
+        env:
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
+        run: |
+          if [ -n "$YT_COOKIES" ]; then printf '%s' "$YT_COOKIES" > "$RUNNER_TEMP/c.txt"; echo "쿠키 $(wc -l < "$RUNNER_TEMP/c.txt")줄"; else echo "쿠키 없음"; touch "$RUNNER_TEMP/c.txt"; fi
+      - name: 영상·자막 받기
+        run: |
+          U="https://www.youtube.com/watch?v=$VID"
+          C="--cookies $RUNNER_TEMP/c.txt"; [ -s "$RUNNER_TEMP/c.txt" ] || C=""
+          yt-dlp $C -F "$U" | tail -20 || true
+          yt-dlp $C -f "bv*[height<=1440]/bv*/b" -o "video.%(ext)s" "$U"
+          yt-dlp $C --skip-download --write-subs --write-auto-subs --sub-langs "ko,ko-orig,ko.*" --sub-format vtt -o "subs" "$U" || true
+          yt-dlp $C --skip-download --dump-json "$U" > meta_full.json || true
+          ls -la
+      - name: 캡처
+        run: python frames.py "$VID" "out/$VID"
+      - name: 정리
+        run: |
+          S=$(ls subs*.vtt 2>/dev/null | grep -m1 orig || ls subs*.vtt 2>/dev/null | head -1)
+          [ -n "$S" ] && python vtt2txt.py "$S" "out/$VID/transcript.txt"
+          python -c "import json;d=json.load(open('meta_full.json'));json.dump({k:d.get(k) for k in ['id','title','description','upload_date','duration','chapters']},open('out/$VID/meta.json','w'),ensure_ascii=False,indent=1)" || true
+      - name: 올리기
+        run: |
+          git fetch origin results 2>/dev/null && git checkout -q -B results FETCH_HEAD || git checkout -q --orphan results
+          git rm -rq --cached . 2>/dev/null || true
+          rm -rf "$VID"; mv "out/$VID" "$VID"
+          git add "$VID"
+          git -c user.name=grab-bot -c user.email=grab@users.noreply.github.com commit -qm "🎬 $VID"
+          git push -q origin results
