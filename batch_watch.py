@@ -33,7 +33,10 @@ for v in vids:
             "generationConfig": {"temperature": 0.2, "maxOutputTokens": 60000, "responseMimeType": "application/json"}}
     res = None
     for model in [m for _ in range(5) for m in ("gemini-3.8-flash", "gemini-flash-latest")]:
-        rr = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={KEY}", json=body, timeout=900)
+        try:
+            rr = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={KEY}", json=body, timeout=900)
+        except requests.RequestException as ex:                 # 연결 끊김 → 잠시 뒤 다시
+            print(v["id"], model, "연결 오류", ex); time.sleep(60); continue
         print(v["id"], model, rr.status_code)
         if rr.ok:
             try:

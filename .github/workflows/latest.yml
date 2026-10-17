@@ -25,7 +25,8 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python batch_watch.py "${{ inputs.n || 5 }}" done out
-      - name: 올리기
+      - name: 올리기 (중간에 실패해도 된 것은 올림)
+        if: always()
         run: |
           ls out >/dev/null 2>&1 || { echo "새 결과 없음"; exit 0; }
           cd done
