@@ -1,32 +1,42 @@
-# 🧵 오늘 스레드 요약 → 텔레그램 (kiwoom-auto-trader 대신 여기서 돌림: 공개 창고라 GitHub 작업 시간 무료)
-# 앱 🧵 버튼은 그대로 kiwoom-auto-trader app-data 에 요청을 적고, 여기서 10분마다 새 요청이 있는지 보고 실행한다.
+# 🧵 스레드 새 글 요약 → 텔레그램 (kiwoom-auto-trader 대신 여기서 돌림: 공개 창고라 GitHub 작업 시간 무료)
+# 언제 보내나 (2026-10-21 사용자 지정): 한국시간 8:00 · 10:00 · 11:30 · 17:30 · 22:00 + 앱 🧵 버튼 누를 때. 새 글이 없으면 안 보냄.
+#   GitHub 예약은 몇 시간씩 늦거나 빠지기도 해서, 오전·오후 묶음 시작 전에 미리 깨워 두고 작업 안에서 시각을 기다렸다 보냄
+#   (오전 7시쯤 깨어 11:40까지, 오후 5시쯤 깨어 22:10까지. 깨어 있는 동안 앱 버튼 요청도 2분 안에 처리)
+#   깨우는 예약이 빠지면 뒤의 예비 예약·10분 확인이 밀린 회차를 대신 보냄 (3시간 지나면 그 회차는 건너뛰고 다음 회차에 같이)
+# 같은 글 두 번 안 보냄: 보낸 글 주소·내용 지문·메시지 지문을 kiwoom-auto-trader app-data 의 digest/threads_tg_state.json 에 바로바로 적음
 # 코드는 비공개 창고(kiwoom-auto-trader)에서 그때그때 받아 쓰고, 결과(요약·보낸 글 기록)도 그쪽 app-data 에 쓴다.
 # 필요한 비밀값: KIWOOM_TOKEN(kiwoom-auto-trader 읽기·쓰기 토큰), TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, GEMINI_API_KEY, THREADS_COOKIES(있으면)
 name: threads
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "13 22 * * *"     # 한국 07:13 오전 묶음 깨우기 (8:00·10:00·11:30)
+    - cron: "7 23 * * *"      # 한국 08:07 오전 예비
+    - cron: "53 7 * * *"      # 한국 16:53 오후 묶음 깨우기 (17:30·22:00)
+    - cron: "7 10 * * *"      # 한국 19:07 오후 예비
+    - cron: "37 12 * * *"     # 한국 21:37 오후 예비 2
+    - cron: "*/10 * * * *"    # 앱 버튼 요청·밀린 회차 확인 (한 번만 보고 끝)
   workflow_dispatch:
     inputs:
       force:
-        description: "요청 없어도 지금 바로 요약 보내기"
+        description: "요청 없어도 지금 바로 요약 보내기 (새 글만)"
         type: boolean
         default: false
 permissions:
   contents: read
-concurrency: threads
+concurrency: threads       # 한 번에 하나만 → 두 작업이 동시에 같은 글을 보내는 일 없음
 jobs:
   threads:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 340
     env:
       REPO: ellabot7/kiwoom-auto-trader
     steps:
-      - name: 새 요청 있나
+      - name: 할 일 있나
         id: req
         env:
           TOKEN: ${{ secrets.KIWOOM_TOKEN }}
           FORCE: ${{ inputs.force }}
+          CRON: ${{ github.event.schedule }}
         run: |
           if [ -z "$TOKEN" ]; then echo "비밀값 KIWOOM_TOKEN 이 없음"; exit 1; fi
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
@@ -40,32 +50,44 @@ jobs:
               except urllib.error.HTTPError as e:
                   if e.code == 404: return {}
                   raise
-          if os.environ.get("FORCE") == "true":
-              print("run=true"); print("수동 실행", file=sys.stderr); sys.exit()
-          at = get("digest/requests/threads_today.json").get("at", "")
           now = datetime.now(timezone(timedelta(hours=9)))
-          done = get(f"digest/threads_today/{at[:10]}.json").get("at", "") if at else ""
+          if os.environ.get("FORCE") == "true":
+              print("mode=force"); print("수동 실행", file=sys.stderr); sys.exit()
+          cron = os.environ.get("CRON", "")
+          if cron and cron != "*/10 * * * *":
+              print("mode=watch"); print(f"묶음 깨우기 ({cron})", file=sys.stderr); sys.exit()
+          tg = get("digest/threads_tg_state.json")
+          done = set(tg.get("slots", []))
+          due = []
+          for h, m in ((8, 0), (10, 0), (11, 30), (17, 30), (22, 0)):          # digest/run.py THREADS_SLOTS 와 같게
+              t = now.replace(hour=h, minute=m, second=0, microsecond=0)
+              if t <= now < t + timedelta(hours=3) and f"{t:%Y-%m-%d %H:%M}" not in done:
+                  due.append(f"{t:%H:%M}")
+          at = get("digest/requests/threads_today.json").get("at", "")
+          last = get(f"digest/threads_today/{at[:10]}.json").get("at", "") if at else ""
           fresh = bool(at) and now - datetime.fromisoformat(at).replace(tzinfo=now.tzinfo) < timedelta(hours=12)
-          run = fresh and at[:16] > done[:16]
-          print(f"요청 {at or '없음'} · 마지막 요약 {done or '없음'} → {'실행' if run else '건너뜀'}", file=sys.stderr)
-          print(f"run={'true' if run else 'false'}")
+          req = fresh and at[:16] > max(last[:16], tg.get("req_done", "")[:16])
+          run = bool(due) or req
+          print(f"밀린 회차 {due or '없음'} · 버튼 요청 {at if req else '없음'} → {'실행' if run else '건너뜀'}", file=sys.stderr)
+          print(f"mode={'once' if run else 'skip'}")
           PY
       - uses: actions/checkout@v5
-        if: steps.req.outputs.run == 'true'
+        if: steps.req.outputs.mode != 'skip'
         with:
           repository: ellabot7/kiwoom-auto-trader
           ref: master
           token: ${{ secrets.KIWOOM_TOKEN }}
       - uses: actions/setup-python@v6
-        if: steps.req.outputs.run == 'true'
+        if: steps.req.outputs.mode != 'skip'
         with:
           python-version: "3.12"
-      - if: steps.req.outputs.run == 'true'
+      - if: steps.req.outputs.mode != 'skip'
         run: pip install -q pandas numpy requests finance-datareader playwright && python -m playwright install --with-deps chromium >/dev/null
-      - name: 오늘 스레드 요약 보내기
-        if: steps.req.outputs.run == 'true'
+      - name: 스레드 새 글 요약 보내기
+        if: steps.req.outputs.mode != 'skip'
         env:
           TOKEN: ${{ secrets.KIWOOM_TOKEN }}
+          MODE: ${{ steps.req.outputs.mode }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -75,8 +97,17 @@ jobs:
           unset THREADS_COOKIES
           # 공개 창고라 실행 기록을 누구나 볼 수 있음 → 요약 내용은 화면에 찍지 않고 몇 줄만
           export GITHUB_REPOSITORY="$REPO" GITHUB_TOKEN="$TOKEN"
-          if python -m digest.run --threads-today > "$RUNNER_TEMP/out.txt" 2>&1; then
-            grep -E "^@|텔레그램" "$RUNNER_TEMP/out.txt" | cut -c1-120 || true
+          case "$MODE" in
+            force) ARGS="--threads-today" ;;
+            watch) ARGS="--threads-watch auto" ;;
+            *)     ARGS="--threads-watch 0" ;;
+          esac
+          python -u -m digest.run $ARGS > "$RUNNER_TEMP/out.txt" 2>&1 &
+          PID=$!
+          # 오래 깨어 있는 동안에도 진행 줄만 보이게 (요약 내용은 안 찍음)
+          while kill -0 $PID 2>/dev/null; do sleep 60; done
+          if wait $PID; then
+            grep -E "^@|텔레그램|실행:|분 동안|같은 내용" "$RUNNER_TEMP/out.txt" | cut -c1-120 || true
           else
             tail -40 "$RUNNER_TEMP/out.txt"; exit 1
           fi
