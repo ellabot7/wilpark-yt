@@ -1,0 +1,35 @@
+# 🎬 유튜브 자동 요약 → 텔레그램 (Claude 없이 돎, 공개 창고라 GitHub 작업 시간 무료)
+# 10분마다: 앱 🎬 유튜브 요약 화면에 넣은 주소 + 윌팍 채널 새 영상(최근 이틀)을 Gemini 로 요약 → kiwoom-auto-trader app-data 에 저장 → 텔레그램 "요약 다 됐습니다"
+# 할 일이 없으면 몇 초 만에 끝남. 한 영상은 한 번만 요약·한 번만 알림. 코드는 비공개 창고에서 받아 씀(여기 공개 안 됨), 실행 기록에 요약 내용은 안 찍음.
+# 비밀값: KIWOOM_TOKEN, GEMINI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (threads 와 같은 것, 이미 있음)
+name: ytsum
+on:
+  schedule:
+    - cron: "3-59/10 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: ytsum
+jobs:
+  ytsum:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: ellabot7/kiwoom-auto-trader
+          ref: master
+          token: ${{ secrets.KIWOOM_TOKEN }}
+          sparse-checkout: digest
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests
+      - name: 요약하기
+        env:
+          GITHUB_REPOSITORY: ellabot7/kiwoom-auto-trader
+          GITHUB_TOKEN: ${{ secrets.KIWOOM_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m digest.ytsum

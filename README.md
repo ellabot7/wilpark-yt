@@ -12,3 +12,7 @@ kiwoom-auto-trader 의 GitHub 작업 시간이 막혀서 여기서 대신 돌림
 코드는 비공개 창고에서 그때그때 받아 쓰고(여기 공개되지 않음), 요약·보낸 글 기록도 그쪽 app-data 에 씀. 실행 기록에는 요약 내용을 찍지 않음.
 
 비밀값(Settings → Secrets and variables → Actions): `KIWOOM_TOKEN`(kiwoom-auto-trader Contents 읽기·쓰기 토큰), `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `GEMINI_API_KEY`(이미 있음), `THREADS_COOKIES`(있으면).
+
+## 🎬 유튜브 자동 요약 → 텔레그램 (ytsum)
+
+10분마다 앱 🎬 유튜브 요약 화면에 넣은 주소와 윌팍 채널 새 영상을 Gemini 로 요약해 kiwoom-auto-trader app-data(`digest/yt_summary/`)에 저장하고 텔레그램으로 알림. 비밀값은 threads 와 같음. 지금 바로: Actions → ytsum → Run workflow.
