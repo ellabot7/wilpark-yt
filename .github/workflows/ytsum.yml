@@ -27,9 +27,11 @@ jobs:
       - run: pip install -q requests
       - name: 요약하기
         env:
-          GITHUB_REPOSITORY: ellabot7/kiwoom-auto-trader
-          GITHUB_TOKEN: ${{ secrets.KIWOOM_TOKEN }}
+          TOKEN: ${{ secrets.KIWOOM_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python -m digest.ytsum
+        run: |
+          # GITHUB_REPOSITORY 는 env: 로는 못 바꿔서 여기서 (threads 와 같음)
+          export GITHUB_REPOSITORY=ellabot7/kiwoom-auto-trader GITHUB_TOKEN="$TOKEN"
+          python -m digest.ytsum
