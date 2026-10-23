@@ -1,0 +1,89 @@
+# 📨 고수 단톡 정리 → 텔레그램 (kiwoom-auto-trader 의 daily-digest 예약 대신 여기서 돌림: 공개 창고라 GitHub 작업 시간 무료)
+# 언제 보내나: 앱(💬 단톡방 대화 올리기 → 📨 고수 단톡 정리 텔레그램)에서 켜기·끄기와 보낼 시각을 고름 → app-data 의 digest/chat_tg.json
+#   10분마다 가볍게 보고, 정한 시각이 지났고(3시간 안) 아직 안 보낸 회차가 있을 때만 코드를 받아 돌림. 새 고수 말이 없으면 안 보냄
+# 같은 회차 두 번 안 보냄: 보낸 회차를 app-data 의 digest/state.json chat_slots 에 적음
+# 대화 원자료는 앱이 올린 보관함(digest/chat_inbox_app.csv) + 앱 자동 저장 zip 의 chat_inbox.csv
+# 필요한 비밀값: KIWOOM_TOKEN(kiwoom-auto-trader 읽기·쓰기 토큰), TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, GEMINI_API_KEY
+name: chatdigest
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "시각과 상관없이 지금 한 번 정리 보내기 (지난 보고 뒤 새 고수 말만)"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency: chatdigest       # 한 번에 하나만 → 같은 회차를 두 번 보내는 일 없음
+jobs:
+  chatdigest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      REPO: ellabot7/kiwoom-auto-trader
+    steps:
+      - name: 보낼 회차 있나
+        id: req
+        env:
+          TOKEN: ${{ secrets.KIWOOM_TOKEN }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          if [ -z "$TOKEN" ]; then echo "비밀값 KIWOOM_TOKEN 이 없음"; exit 1; fi
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import base64, json, os, re, sys, urllib.request
+          from datetime import datetime, timedelta, timezone
+          def get(path):
+              r = urllib.request.Request(f"https://api.github.com/repos/{os.environ['REPO']}/contents/{path}?ref=app-data",
+                                         headers={"Authorization": f"Bearer {os.environ['TOKEN']}", "Accept": "application/vnd.github+json"})
+              try:
+                  return json.loads(base64.b64decode(json.load(urllib.request.urlopen(r))["content"]))
+              except urllib.error.HTTPError as e:
+                  if e.code == 404: return {}
+                  raise
+          if os.environ.get("FORCE") == "true":
+              print("mode=force"); print("수동 실행", file=sys.stderr); sys.exit()
+          now = datetime.now(timezone(timedelta(hours=9)))
+          cfg = get("digest/chat_tg.json")                                  # surge_screener/chatinbox.py chat_cfg 와 같게
+          on, times = bool(cfg.get("on", True)), cfg.get("times", ["11:50", "17:20"])
+          done = set(get("digest/state.json").get("chat_slots", []))
+          due = []
+          for hm in times if on else []:
+              m = re.fullmatch(r"(\d{1,2}):(\d{2})", str(hm).strip())
+              if not m: continue
+              t = now.replace(hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0)
+              if t <= now < t + timedelta(hours=3) and f"{t:%Y-%m-%d %H:%M}" not in done:
+                  due.append(f"{t:%H:%M}")
+          print(f"{'켜짐' if on else '꺼짐'} {times} · 보낼 회차 {due or '없음'}", file=sys.stderr)
+          print(f"mode={'watch' if due else 'skip'}")
+          PY
+      - uses: actions/checkout@v5
+        if: steps.req.outputs.mode != 'skip'
+        with:
+          repository: ellabot7/kiwoom-auto-trader
+          ref: master
+          token: ${{ secrets.KIWOOM_TOKEN }}
+      - uses: actions/setup-python@v6
+        if: steps.req.outputs.mode != 'skip'
+        with:
+          python-version: "3.12"
+      - if: steps.req.outputs.mode != 'skip'
+        run: pip install -q pandas numpy requests finance-datareader
+      - name: 고수 단톡 정리 보내기
+        if: steps.req.outputs.mode != 'skip'
+        env:
+          TOKEN: ${{ secrets.KIWOOM_TOKEN }}
+          MODE: ${{ steps.req.outputs.mode }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          # 공개 창고라 실행 기록을 누구나 볼 수 있음 → 정리 내용은 화면에 찍지 않고 몇 줄만
+          export GITHUB_REPOSITORY="$REPO" GITHUB_TOKEN="$TOKEN"
+          if [ "$MODE" = "force" ]; then ARGS=""; else ARGS="--chat-watch"; fi
+          if python -u -m digest.run $ARGS > "$RUNNER_TEMP/out.txt" 2>&1; then
+            grep -E "^보관함|^새 영상|회차|꺼짐|텔레그램|새 것 없음|LLM 요약 실패" "$RUNNER_TEMP/out.txt" | cut -c1-120 || true
+          else
+            grep -E "Error|error|Traceback|File \"" "$RUNNER_TEMP/out.txt" | tail -15 | cut -c1-200; exit 1
+          fi
