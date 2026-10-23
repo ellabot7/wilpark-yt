@@ -1,29 +1,19 @@
 # 🧵 스레드 새 글 요약 → 텔레그램 (kiwoom-auto-trader 대신 여기서 돌림: 공개 창고라 GitHub 작업 시간 무료)
 # 언제 보내나 (2026-10-21 사용자 지정): 한국시간 8:00 · 10:00 · 11:30 · 17:30 · 22:00 + 앱 🧵 버튼 누를 때. 새 글이 없으면 안 보냄.
-#   GitHub 예약은 몇 시간씩 늦거나 빠지기도 해서, 오전·오후 묶음 시작 전에 미리 깨워 두고 작업 안에서 시각을 기다렸다 보냄
-#   (오전 묶음은 11:40까지, 17:30 회차는 17:40까지, 22:00 회차는 22:10까지 깨어 있음. 깨어 있는 동안 앱 버튼 요청도 2분 안에 처리)
-#   깨우는 예약이 빠지면 뒤의 예비 예약·10분 확인이 밀린 회차를 대신 보냄 (3시간 지나면 그 회차는 건너뛰고 다음 회차에 같이)
+#   GitHub 예약은 몇 시간씩 늦거나 아예 빠지기도 해서(10-23 오전 깨우기 4개 모두 안 돎) 믿지 않음:
+#   회차가 5시간 40분 안으로 다가오면 어떤 실행이든 깨어 기다렸다 보내고, 끝날 때 오늘 남은 회차가 있으면 다음 작업을 직접 부름
+#   (회차 20분 전에 넘겨줌). 밤 22:10 뒤엔 쉬고, 새벽 2:20 넘어 처음 도는 예약이 다시 시작. 깨어 있는 동안 앱 버튼 요청도 2분 안에 처리
 # 같은 글 두 번 안 보냄: 보낸 글 주소·내용 지문·메시지 지문을 kiwoom-auto-trader app-data 의 digest/threads_tg_state.json 에 바로바로 적음
 # 코드는 비공개 창고(kiwoom-auto-trader)에서 그때그때 받아 쓰고, 결과(요약·보낸 글 기록)도 그쪽 app-data 에 쓴다.
 # 필요한 비밀값: KIWOOM_TOKEN(kiwoom-auto-trader 읽기·쓰기 토큰), TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, GEMINI_API_KEY, THREADS_COOKIES(있으면)
 name: threads
 on:
   schedule:
-    # GitHub 예약은 1~2시간 늦게 시작하거나 빠지기도 함(10-23 아침 07:13 예약이 09:38에 시작) → 회차 전에 여러 번 일찍 깨움.
-    # 먼저 깬 작업이 회차 시각까지 기다렸다 보내고, 뒤에 깬 것은 그동안 줄 서 있다가 '이미 보냄'을 보고 끝남
-    - cron: "57 20 * * *"     # 한국 05:57 ┐
-    - cron: "31 21 * * *"     # 한국 06:31 │ 오전 묶음 (8:00·10:00·11:30, 11:40까지 깨어 있음)
-    - cron: "13 22 * * *"     # 한국 07:13 │
-    - cron: "7 23 * * *"      # 한국 08:07 ┘
-    - cron: "43 3 * * *"      # 한국 12:43 ┐
-    - cron: "17 5 * * *"      # 한국 14:17 │ 17:30 회차 (17:40까지)
-    - cron: "53 6 * * *"      # 한국 15:53 │
-    - cron: "7 8 * * *"       # 한국 17:07 ┘
-    - cron: "3 9 * * *"       # 한국 18:03 ┐
-    - cron: "37 10 * * *"     # 한국 19:37 │ 22:00 회차 (22:10까지)
-    - cron: "41 11 * * *"     # 한국 20:41 │
-    - cron: "37 12 * * *"     # 한국 21:37 ┘
-    - cron: "*/10 * * * *"    # 앱 버튼 요청·밀린 회차 확인 (한 번만 보고 끝)
+    - cron: "*/10 * * * *"    # 시작 신호 (GitHub 이 실제로는 1~3시간에 한 번쯤만 돌림). 이어 달리기가 끊겼을 때 다시 잇는 역할
+    - cron: "23 17 * * *"     # 한국 02:23 ┐ 아침 8시 전에 이어 달리기를 시작할 기회 더
+    - cron: "47 18 * * *"     # 한국 03:47 │
+    - cron: "11 20 * * *"     # 한국 05:11 │
+    - cron: "37 21 * * *"     # 한국 06:37 ┘
   workflow_dispatch:
     inputs:
       force:
@@ -32,6 +22,7 @@ on:
         default: false
 permissions:
   contents: read
+  actions: write          # 끝날 때 다음 작업을 부르려고
 concurrency: threads       # 한 번에 하나만 → 두 작업이 동시에 같은 글을 보내는 일 없음
 jobs:
   threads:
@@ -62,23 +53,22 @@ jobs:
           now = datetime.now(timezone(timedelta(hours=9)))
           if os.environ.get("FORCE") == "true":
               print("mode=force"); print("수동 실행", file=sys.stderr); sys.exit()
-          cron = os.environ.get("CRON", "")
-          if cron and cron != "*/10 * * * *":
-              print("mode=watch"); print(f"묶음 깨우기 ({cron})", file=sys.stderr); sys.exit()
           tg = get("digest/threads_tg_state.json")
           done = set(tg.get("slots", []))
-          due = []
+          due, soon = [], []
           for h, m in ((8, 0), (10, 0), (11, 30), (17, 30), (22, 0)):          # digest/run.py THREADS_SLOTS 와 같게
               t = now.replace(hour=h, minute=m, second=0, microsecond=0)
-              if t <= now < t + timedelta(hours=3) and f"{t:%Y-%m-%d %H:%M}" not in done:
-                  due.append(f"{t:%H:%M}")
+              if f"{t:%Y-%m-%d %H:%M}" in done or now >= t + timedelta(hours=3):
+                  continue
+              (due if t <= now else soon).append(t)
+          soon = [t for t in soon if t - now <= timedelta(hours=5, minutes=40)]   # digest/run.py WATCH_CAP 와 같게
           at = get("digest/requests/threads_today.json").get("at", "")
           last = get(f"digest/threads_today/{at[:10]}.json").get("at", "") if at else ""
           fresh = bool(at) and now - datetime.fromisoformat(at).replace(tzinfo=now.tzinfo) < timedelta(hours=12)
           req = fresh and at[:16] > max(last[:16], tg.get("req_done", "")[:16])
-          run = bool(due) or req
-          print(f"밀린 회차 {due or '없음'} · 버튼 요청 {at if req else '없음'} → {'실행' if run else '건너뜀'}", file=sys.stderr)
-          print(f"mode={'once' if run else 'skip'}")
+          mode = "watch" if (due or soon) else "once" if req else "skip"
+          print(f"밀린 회차 {[f'{t:%H:%M}' for t in due] or '없음'} · 다가오는 회차 {[f'{t:%H:%M}' for t in soon] or '없음'} · 버튼 요청 {at if req else '없음'} → {mode}", file=sys.stderr)
+          print(f"mode={mode}")
           PY
       - uses: actions/checkout@v5
         if: steps.req.outputs.mode != 'skip'
@@ -111,12 +101,25 @@ jobs:
             watch) ARGS="--threads-watch auto" ;;
             *)     ARGS="--threads-watch 0" ;;
           esac
+          export NEXT_FLAG="$RUNNER_TEMP/next"
           python -u -m digest.run $ARGS > "$RUNNER_TEMP/out.txt" 2>&1 &
           PID=$!
           # 오래 깨어 있는 동안에도 진행 줄만 보이게 (요약 내용은 안 찍음)
           while kill -0 $PID 2>/dev/null; do sleep 60; done
           if wait $PID; then
-            grep -E "^@|텔레그램|실행:|분 동안|같은 내용" "$RUNNER_TEMP/out.txt" | cut -c1-120 || true
+            grep -E "^@|텔레그램|실행:|분 동안|같은 내용|다음 작업" "$RUNNER_TEMP/out.txt" | cut -c1-120 || true
           else
             tail -40 "$RUNNER_TEMP/out.txt"; exit 1
+          fi
+      - name: 다음 작업 부르기 (오늘 남은 회차가 있으면)
+        if: steps.req.outputs.mode == 'watch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # python 이 오늘 남은 회차를 보고 표시해 둔 때만 (실패했을 땐 안 부름 → 실패가 계속 반복되지 않게, 10분 예약이 나중에 다시 시작)
+          if [ -f "$RUNNER_TEMP/next" ]; then
+            curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/threads.yml/dispatches" -d '{"ref":"main"}' && echo "다음 작업 부름"
+          else
+            echo "오늘 남은 회차 없음 → 쉼"
           fi
