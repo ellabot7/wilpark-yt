@@ -1,13 +1,16 @@
 # 📨 고수 단톡 정리 → 텔레그램 (kiwoom-auto-trader 의 daily-digest 예약 대신 여기서 돌림: 공개 창고라 GitHub 작업 시간 무료)
 # 언제 보내나: 앱(💬 단톡방 대화 올리기 → 📨 고수 단톡 정리 텔레그램)에서 켜기·끄기와 보낼 시각을 고름 → app-data 의 digest/chat_tg.json
-#   10분마다 가볍게 보고, 정한 시각이 지났고(3시간 안) 아직 안 보낸 회차가 있을 때만 코드를 받아 돌림. 새 고수 말이 없으면 안 보냄
+#   GitHub 예약은 몇 시간씩 늦거나 빠짐(10-23 */10 예약이 2시간 넘게 한 번도 안 돎) → 여러 시각에 깨어, 4시간 안에 회차가 있으면
+#   작업 안에서 그 시각까지 기다렸다 보냄. 정한 시각이 지났고(3시간 안) 아직 안 보낸 회차가 있으면 바로 보냄. 새 고수 말이 없으면 안 보냄
 # 같은 회차 두 번 안 보냄: 보낸 회차를 app-data 의 digest/state.json chat_slots 에 적음
 # 대화 원자료는 앱이 올린 보관함(digest/chat_inbox_app.csv) + 앱 자동 저장 zip 의 chat_inbox.csv
 # 필요한 비밀값: KIWOOM_TOKEN(kiwoom-auto-trader 읽기·쓰기 토큰), TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, GEMINI_API_KEY
 name: chatdigest
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/10 * * * *"    # 회차 확인 (GitHub이 자주 건너뜀)
+    - cron: "7 */2 * * *"     # 두 시간마다 깨우기 (4시간 앞 회차까지 기다림)
+    - cron: "37 1-23/2 * * *"
   workflow_dispatch:
     inputs:
       force:
@@ -20,7 +23,7 @@ concurrency: chatdigest       # 한 번에 하나만 → 같은 회차를 두 �
 jobs:
   chatdigest:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 300
     env:
       REPO: ellabot7/kiwoom-auto-trader
     steps:
@@ -55,9 +58,23 @@ jobs:
               t = now.replace(hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0)
               if t <= now < t + timedelta(hours=3) and f"{t:%Y-%m-%d %H:%M}" not in done:
                   due.append(f"{t:%H:%M}")
-          print(f"{'켜짐' if on else '꺼짐'} {times} · 보낼 회차 {due or '없음'}", file=sys.stderr)
-          print(f"mode={'watch' if due else 'skip'}")
+          wait = None                                                       # 4시간 안 다음 회차까지 몇 초
+          for hm in times if on and not due else []:
+              m = re.fullmatch(r"(\d{1,2}):(\d{2})", str(hm).strip())
+              if not m: continue
+              for d in (0, 1):
+                  t = now.replace(hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0) + timedelta(days=d)
+                  if now < t <= now + timedelta(hours=4) and f"{t:%Y-%m-%d %H:%M}" not in done:
+                      s_ = int((t - now).total_seconds()) + 30
+                      wait = s_ if wait is None else min(wait, s_)
+          print(f"{'켜짐' if on else '꺼짐'} {times} · 보낼 회차 {due or '없음'}"
+                + (f" · 다음 회차 {wait // 60}분 뒤까지 기다림" if wait else ""), file=sys.stderr)
+          print(f"mode={'watch' if due or wait else 'skip'}")
+          print(f"wait={wait or 0}")
           PY
+      - name: 회차 시각까지 기다리기
+        if: steps.req.outputs.wait != '0' && steps.req.outputs.wait != ''
+        run: sleep ${{ steps.req.outputs.wait }}
       - uses: actions/checkout@v5
         if: steps.req.outputs.mode != 'skip'
         with:
