@@ -16,6 +16,9 @@ on:
       ask_name:
         description: "질문 답 파일 이름 (예: ask_1106.md)"
         default: "ask.md"
+      codes:
+        description: "일봉만 받기: 종목코드 쉼표 (vid 는 - ) → results 가지 prices/"
+        default: ""
       models:
         description: "모델 (쉼표, 비우면 flash 둘). 한도 바닥이면 gemini-flash-lite-latest"
         default: ""
@@ -39,7 +42,19 @@ jobs:
         run: |
           V=$(python -c "import re,sys;s=sys.argv[1];m=re.search(r'(?:v=|youtu\.be/|shorts/|live/)([\w-]{11})',s);print(m.group(1) if m else s.strip())" "${{ inputs.vid }}")
           echo "VID=$V" >> "$GITHUB_ENV"
+      - name: 일봉 받기
+        if: ${{ inputs.codes != '' }}
+        env:
+          CODES: ${{ inputs.codes }}
+        run: |
+          python price_fetch.py "$CODES" out/prices
+          git fetch origin results && git checkout -q -B results FETCH_HEAD
+          git rm -rq --cached . 2>/dev/null || true
+          mkdir -p prices && cp out/prices/* prices/ && git add prices
+          git -c user.name=grab-bot -c user.email=grab@users.noreply.github.com commit -qm "📈 prices $CODES"
+          git push -q origin results
       - name: Gemini 로 보기
+        if: ${{ inputs.codes == '' }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ONLY: ${{ inputs.only }}
@@ -49,6 +64,7 @@ jobs:
           MODELS: ${{ inputs.models }}
         run: python gemini_watch.py "$VID" "out/$VID"
       - name: 올리기
+        if: ${{ inputs.codes == '' }}
         run: |
           git fetch origin results && git checkout -q -B results FETCH_HEAD || git checkout -q --orphan results
           git rm -rq --cached . 2>/dev/null || true
