@@ -15,10 +15,18 @@ PROMPTS = {
 JSON 배열만 출력: [{"t":"분:초","end":"분:초","name":"종목/지수 이름","code":"종목코드(보이면)","period":"1분봉/3분봉/일봉/주봉 등","what":"차트에 보이는 것(이평선 색, 추세선, B/S 표시, 박스, 화살표 등) 한 줄","said":"그때 윌팍이 한 말 요지 한 줄","good":true/false (고수 차트 공부 자료로 볼 만한지)}]""",
 }
 ONLY = os.environ.get("ONLY", "")
+# 질문 하나만 따로: ASK(질문), ASK_NAME(파일 이름), CLIP="시작초-끝초"(그 구간만 자세히, fps 2)
+if os.environ.get("ASK"):
+    PROMPTS = {os.environ.get("ASK_NAME") or "ask.md": os.environ["ASK"]}
+    ONLY = ""
+VM = {}
+if re.fullmatch(r"\d+-\d+", os.environ.get("CLIP", "")):
+    a, b = os.environ["CLIP"].split("-")
+    VM = {"videoMetadata": {"startOffset": f"{a}s", "endOffset": f"{b}s", "fps": 2}}
 for fn, prompt in PROMPTS.items():
     if ONLY and fn not in ONLY.split(","):
         continue
-    body = {"contents": [{"parts": [{"file_data": {"file_uri": URL}}, {"text": prompt}]}],
+    body = {"contents": [{"parts": [{"file_data": {"file_uri": URL}, **VM}, {"text": prompt}]}],
             "generationConfig": {"temperature": 0.2, "maxOutputTokens": 32768}}
     if fn.endswith(".json"):
         body["generationConfig"]["responseMimeType"] = "application/json"

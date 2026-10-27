@@ -10,6 +10,15 @@ on:
       only:
         description: "이것만 다시 (예: charts.json), 비우면 전부"
         default: ""
+      ask:
+        description: "따로 물어볼 질문 (비우면 요약·장면)"
+        default: ""
+      ask_name:
+        description: "질문 답 파일 이름 (예: ask_1106.md)"
+        default: "ask.md"
+      clip:
+        description: "구간만 자세히 보기, 초 단위 시작-끝 (예: 640-720)"
+        default: ""
 permissions:
   contents: write
 concurrency: grab
@@ -31,6 +40,9 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ONLY: ${{ inputs.only }}
+          ASK: ${{ inputs.ask }}
+          ASK_NAME: ${{ inputs.ask_name }}
+          CLIP: ${{ inputs.clip }}
         run: python gemini_watch.py "$VID" "out/$VID"
       - name: 올리기
         run: |
