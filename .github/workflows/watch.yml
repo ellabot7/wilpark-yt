@@ -16,6 +16,9 @@ on:
       ask_name:
         description: "질문 답 파일 이름 (예: ask_1106.md)"
         default: "ask.md"
+      models:
+        description: "모델 (쉼표, 비우면 flash 둘). 한도 바닥이면 gemini-flash-lite-latest"
+        default: ""
       clip:
         description: "구간만 자세히 보기, 초 단위 시작-끝 (예: 640-720)"
         default: ""
@@ -43,6 +46,7 @@ jobs:
           ASK: ${{ inputs.ask }}
           ASK_NAME: ${{ inputs.ask_name }}
           CLIP: ${{ inputs.clip }}
+          MODELS: ${{ inputs.models }}
         run: python gemini_watch.py "$VID" "out/$VID"
       - name: 올리기
         run: |

@@ -31,7 +31,7 @@ for fn, prompt in PROMPTS.items():
     if fn.endswith(".json"):
         body["generationConfig"]["responseMimeType"] = "application/json"
     done = False
-    for model in [m for _ in range(4) for m in ("gemini-3.8-flash", "gemini-flash-latest")]:  # 붐비면(503) 쉬었다 다시
+    for model in [m for _ in range(4) for m in (os.environ.get("MODELS") or "gemini-3.8-flash,gemini-flash-latest").split(",")]:  # 붐비면(503) 쉬었다 다시
         if done:
             break
         try:
