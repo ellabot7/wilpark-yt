@@ -49,7 +49,6 @@ jobs:
         run: |
           python price_fetch.py "$CODES" out/prices
           git fetch origin results && git checkout -q -B results FETCH_HEAD
-          git rm -rq --cached . 2>/dev/null || true
           mkdir -p prices && cp out/prices/* prices/ && git add prices
           git -c user.name=grab-bot -c user.email=grab@users.noreply.github.com commit -qm "📈 prices $CODES"
           git push -q origin results
@@ -66,8 +65,7 @@ jobs:
       - name: 올리기
         if: ${{ inputs.codes == '' }}
         run: |
-          git fetch origin results && git checkout -q -B results FETCH_HEAD || git checkout -q --orphan results
-          git rm -rq --cached . 2>/dev/null || true
+          git fetch origin results && git checkout -q -B results FETCH_HEAD || { git checkout -q --orphan results; git rm -rq --cached . 2>/dev/null || true; }
           mkdir -p "$VID"; cp out/$VID/* "$VID"/ 2>/dev/null || { echo "결과 없음"; exit 1; }
           git add "$VID"
           git -c user.name=grab-bot -c user.email=grab@users.noreply.github.com commit -qm "🤖 $VID gemini"
