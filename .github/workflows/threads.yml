@@ -20,6 +20,10 @@ on:
         description: "요청 없어도 지금 바로 요약 보내기 (새 글만)"
         type: boolean
         default: false
+      thread_shots:
+        description: "지난 N일 고수 스레드 글의 차트 그림만 스샷·차트에 넣기 (0 = 안 함, 요약·텔레그램은 안 보냄)"
+        type: number
+        default: 0
 permissions:
   contents: read
   actions: write          # 끝날 때 다음 작업을 부르려고
@@ -36,6 +40,7 @@ jobs:
         env:
           TOKEN: ${{ secrets.KIWOOM_TOKEN }}
           FORCE: ${{ inputs.force }}
+          SHOTS: ${{ inputs.thread_shots }}
           CRON: ${{ github.event.schedule }}
         run: |
           if [ -z "$TOKEN" ]; then echo "비밀값 KIWOOM_TOKEN 이 없음"; exit 1; fi
@@ -51,6 +56,8 @@ jobs:
                   if e.code == 404: return {}
                   raise
           now = datetime.now(timezone(timedelta(hours=9)))
+          if (os.environ.get("SHOTS") or "0") not in ("", "0"):
+              print("mode=shots"); print("스레드 차트 그림 넣기", file=sys.stderr); sys.exit()
           if os.environ.get("FORCE") == "true":
               print("mode=force"); print("수동 실행", file=sys.stderr); sys.exit()
           tg = get("digest/threads_tg_state.json")
@@ -81,12 +88,16 @@ jobs:
         with:
           python-version: "3.12"
       - if: steps.req.outputs.mode != 'skip'
-        run: pip install -q pandas numpy requests finance-datareader playwright && python -m playwright install --with-deps chromium >/dev/null
+        # pillow·rapidfuzz·tesseract: 스레드 글에 붙은 차트 그림을 읽어 B/S·빨간선을 차트에 넣는 데 씀 (2026-10-28)
+        run: |
+          pip install -q pandas numpy requests finance-datareader playwright pillow rapidfuzz pytesseract && python -m playwright install --with-deps chromium >/dev/null
+          sudo apt-get install -y -q tesseract-ocr tesseract-ocr-kor >/dev/null 2>&1 || echo "tesseract 설치 못 함 (종목 글자 읽기만 빠짐)"
       - name: 스레드 새 글 요약 보내기
         if: steps.req.outputs.mode != 'skip'
         env:
           TOKEN: ${{ secrets.KIWOOM_TOKEN }}
           MODE: ${{ steps.req.outputs.mode }}
+          SHOTS: ${{ inputs.thread_shots }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -98,6 +109,7 @@ jobs:
           export GITHUB_REPOSITORY="$REPO" GITHUB_TOKEN="$TOKEN"
           case "$MODE" in
             force) ARGS="--threads-today" ;;
+            shots) ARGS="--thread-shots $SHOTS" ;;
             watch) ARGS="--threads-watch auto" ;;
             *)     ARGS="--threads-watch 0" ;;
           esac
@@ -107,7 +119,7 @@ jobs:
           # 오래 깨어 있는 동안에도 진행 줄만 보이게 (요약 내용은 안 찍음)
           while kill -0 $PID 2>/dev/null; do sleep 60; done
           if wait $PID; then
-            grep -E "^@|텔레그램|실행:|분 동안|같은 내용|다음 작업" "$RUNNER_TEMP/out.txt" | cut -c1-120 || true
+            grep -E "^@|텔레그램|실행:|분 동안|같은 내용|다음 작업|스레드 그림" "$RUNNER_TEMP/out.txt" | cut -c1-120 || true
           else
             tail -40 "$RUNNER_TEMP/out.txt"; exit 1
           fi
