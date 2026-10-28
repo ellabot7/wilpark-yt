@@ -1,0 +1,47 @@
+# 🧵→📸 고수 스레드 글에 붙은 차트 그림을 지난 N일치 한 번에 스샷 색인·차트(B/S·빨간선)에 넣기 (손 실행만)
+# 매일 도는 threads.yml 은 한 번에 하나만 돌고 몇 시간씩 깨어 있어서, 지난 글 넣기는 따로 돌림. 텔레그램은 안 보냄.
+# 코드는 kiwoom-auto-trader 의 digest/run.py --thread-shots N (2026-10-28)
+name: thread_shots
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "지난 며칠 글의 그림을 넣을까"
+        type: number
+        default: 30
+permissions:
+  contents: read
+concurrency: thread_shots
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      REPO: ellabot7/kiwoom-auto-trader
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: ellabot7/kiwoom-auto-trader
+          ref: master
+          token: ${{ secrets.KIWOOM_TOKEN }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install -q pandas numpy requests finance-datareader playwright pillow rapidfuzz pytesseract && python -m playwright install --with-deps chromium >/dev/null
+          sudo apt-get install -y -q tesseract-ocr tesseract-ocr-kor >/dev/null 2>&1 || echo "tesseract 설치 못 함 (종목 글자 읽기만 빠짐)"
+      - name: 지난 글 그림 넣기
+        env:
+          TOKEN: ${{ secrets.KIWOOM_TOKEN }}
+          THREADS_COOKIES: ${{ secrets.THREADS_COOKIES }}
+          DAYS: ${{ inputs.days }}
+        run: |
+          if [ -n "$THREADS_COOKIES" ]; then printf '%s' "$THREADS_COOKIES" > "$RUNNER_TEMP/tc.txt"; export THREADS_COOKIES_FILE="$RUNNER_TEMP/tc.txt"; fi
+          unset THREADS_COOKIES
+          export GITHUB_REPOSITORY="$REPO" GITHUB_TOKEN="$TOKEN"
+          # 공개 창고라 글 내용은 찍지 않고 결과 줄만
+          if python -u -m digest.run --thread-shots "$DAYS" > "$RUNNER_TEMP/out.txt" 2>&1; then
+            grep -E "^@|스레드 그림|그림 받기 실패" "$RUNNER_TEMP/out.txt" | cut -c1-160 || true
+          else
+            tail -40 "$RUNNER_TEMP/out.txt"; exit 1
+          fi
