@@ -1,0 +1,56 @@
+# 📉 나스닥 선물 바닥 분할매수 알림 → 텔레그램 (공개 창고라 GitHub 작업 시간 무료)
+# 방법: 1년 최고가 −10% · −15% · −20% 에 1 : 2 : 3 으로 나눠 사고 평균가 +8% 에 모두 매도 (kiwoom-auto-trader surge_screener/dipladder.py)
+# 켜기·끄기: 앱 📈 지수 차트 › 나스닥 선물 › 📅 일봉 아래 "📨 텔레그램 알림" → app-data 의 digest/dip_tg.json
+# 같은 알림 두 번 안 보냄: app-data 의 digest/dip_tg_state.json
+# 필요한 비밀값: KIWOOM_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+name: dipalert
+on:
+  schedule:
+    - cron: "30 22 * * *"     # 한국 07:30 (전날 밤 장 마감 뒤)
+    - cron: "0 5 * * *"       # 한국 14:00
+    - cron: "0 13 * * *"      # 한국 22:00
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: dipalert
+jobs:
+  dipalert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      REPO: ellabot7/kiwoom-auto-trader
+    steps:
+      - name: 알림 켜져 있나
+        id: cfg
+        env:
+          TOKEN: ${{ secrets.KIWOOM_TOKEN }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import base64, json, os, urllib.request, urllib.error
+          r = urllib.request.Request(f"https://api.github.com/repos/{os.environ['REPO']}/contents/digest/dip_tg.json?ref=app-data",
+                                     headers={"Authorization": f"Bearer {os.environ['TOKEN']}", "Accept": "application/vnd.github+json"})
+          try:
+              on = bool(json.loads(base64.b64decode(json.load(urllib.request.urlopen(r))["content"])).get("on", False))
+          except urllib.error.HTTPError:
+              on = False
+          print(f"on={'1' if on else '0'}")
+          PY
+      - uses: actions/checkout@v5
+        if: steps.cfg.outputs.on == '1'
+        with:
+          repository: ellabot7/kiwoom-auto-trader
+          ref: master
+          token: ${{ secrets.KIWOOM_TOKEN }}
+      - uses: actions/setup-python@v6
+        if: steps.cfg.outputs.on == '1'
+        with:
+          python-version: "3.12"
+      - if: steps.cfg.outputs.on == '1'
+        run: pip install -q pandas numpy requests yfinance plotly
+      - name: 알림 보내기
+        if: steps.cfg.outputs.on == '1'
+        env:
+          TOKEN: ${{ secrets.KIWOOM_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -u -m surge_screener.dipladder
