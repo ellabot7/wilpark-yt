@@ -5,7 +5,7 @@
 #   (회차 20분 전에 넘겨줌). 밤 22:10 뒤엔 쉬고, 새벽 2:20 넘어 처음 도는 예약이 다시 시작. 깨어 있는 동안 앱 버튼 요청도 2분 안에 처리
 # 같은 글 두 번 안 보냄: 보낸 글 주소·내용 지문·메시지 지문을 kiwoom-auto-trader app-data 의 digest/threads_tg_state.json 에 바로바로 적음
 # 코드는 비공개 창고(kiwoom-auto-trader)에서 그때그때 받아 쓰고, 결과(요약·보낸 글 기록)도 그쪽 app-data 에 쓴다.
-# 필요한 비밀값: KIWOOM_TOKEN(kiwoom-auto-trader 읽기·쓰기 토큰), TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, GEMINI_API_KEY, THREADS_COOKIES(있으면)
+# 필요한 비밀값: KIWOOM_TOKEN(kiwoom-auto-trader 읽기·쓰기 토큰), TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, GEMINI_API_KEY, THREADS_COOKIES(있으면), APP_KEY_MOCK·APP_SECRET_MOCK(키움 모의투자 열쇠, 스레드 그림 B/S 바로 넣기)
 name: threads
 on:
   schedule:
@@ -90,7 +90,7 @@ jobs:
       - if: steps.req.outputs.mode != 'skip'
         # pillow·rapidfuzz·tesseract: 스레드 글에 붙은 차트 그림을 읽어 B/S·빨간선을 차트에 넣는 데 씀 (2026-10-28)
         run: |
-          pip install -q pandas numpy requests finance-datareader playwright pillow rapidfuzz pytesseract && python -m playwright install --with-deps chromium >/dev/null
+          pip install -q pandas numpy requests finance-datareader playwright pillow rapidfuzz pytesseract keyring platformdirs && python -m playwright install --with-deps chromium >/dev/null
           sudo apt-get install -y -q tesseract-ocr tesseract-ocr-kor >/dev/null 2>&1 || echo "tesseract 설치 못 함 (종목 글자 읽기만 빠짐)"
       - name: 스레드 새 글 요약 보내기
         if: steps.req.outputs.mode != 'skip'
@@ -102,6 +102,10 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           THREADS_COOKIES: ${{ secrets.THREADS_COOKIES }}
+          # 키움 모의투자 열쇠: 스레드 그림 B/S 를 그 종목 1분봉에 맞춰 여기서 바로 차트에 넣음 (없으면 앱 열 때 넣음, 2026-11-02)
+          KIWOOM_MODE: demo
+          APP_KEY_MOCK: ${{ secrets.APP_KEY_MOCK }}
+          APP_SECRET_MOCK: ${{ secrets.APP_SECRET_MOCK }}
         run: |
           if [ -n "$THREADS_COOKIES" ]; then printf '%s' "$THREADS_COOKIES" > "$RUNNER_TEMP/tc.txt"; export THREADS_COOKIES_FILE="$RUNNER_TEMP/tc.txt"; fi
           unset THREADS_COOKIES
