@@ -28,12 +28,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: |
-          pip install -q pandas numpy requests finance-datareader playwright pillow rapidfuzz pytesseract && python -m playwright install --with-deps chromium >/dev/null
+          pip install -q pandas numpy requests finance-datareader playwright pillow rapidfuzz pytesseract keyring platformdirs && python -m playwright install --with-deps chromium >/dev/null
           sudo apt-get install -y -q tesseract-ocr tesseract-ocr-kor >/dev/null 2>&1 || echo "tesseract 설치 못 함 (종목 글자 읽기만 빠짐)"
       - name: 지난 글 그림 넣기
         env:
           TOKEN: ${{ secrets.KIWOOM_TOKEN }}
           THREADS_COOKIES: ${{ secrets.THREADS_COOKIES }}
+          # 키움 모의투자 열쇠: 스레드 그림 B/S 를 그 종목 1분봉에 맞춰 여기서 바로 차트에 넣음 (없으면 앱 열 때 넣음, 2026-11-02)
+          KIWOOM_MODE: demo
+          APP_KEY_MOCK: ${{ secrets.APP_KEY_MOCK }}
+          APP_SECRET_MOCK: ${{ secrets.APP_SECRET_MOCK }}
           DAYS: ${{ inputs.days }}
         run: |
           if [ -n "$THREADS_COOKIES" ]; then printf '%s' "$THREADS_COOKIES" > "$RUNNER_TEMP/tc.txt"; export THREADS_COOKIES_FILE="$RUNNER_TEMP/tc.txt"; fi
