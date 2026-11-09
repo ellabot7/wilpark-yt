@@ -1,8 +1,8 @@
 # 🧵 스레드 새 글 요약 → 텔레그램 (kiwoom-auto-trader 대신 여기서 돌림: 공개 창고라 GitHub 작업 시간 무료)
-# 언제 보내나 (2026-10-21 사용자 지정): 한국시간 8:00 · 10:00 · 11:30 · 17:30 · 22:00 + 앱 🧵 버튼 누를 때. 새 글이 없으면 안 보냄.
+# 언제 보내나 (2026-11-09 회장님 지정, 전엔 하루 5번): 한국시간 8:00 · 17:30 하루 두 번 + 앱 🧵 버튼 누를 때. 새 글이 없으면 안 보냄.
 #   GitHub 예약은 몇 시간씩 늦거나 아예 빠지기도 해서(10-23 오전 깨우기 4개 모두 안 돎) 믿지 않음:
 #   회차가 5시간 40분 안으로 다가오면 어떤 실행이든 깨어 기다렸다 보내고, 끝날 때 오늘 남은 회차가 있으면 다음 작업을 직접 부름
-#   (회차 20분 전에 넘겨줌). 밤 22:10 뒤엔 쉬고, 새벽 2:20 넘어 처음 도는 예약이 다시 시작. 깨어 있는 동안 앱 버튼 요청도 2분 안에 처리
+#   (회차 20분 전에 넘겨줌). 17:40 뒤엔 쉬고, 새벽 2:20 넘어 처음 도는 예약이 다시 시작. 깨어 있는 동안 앱 버튼 요청도 2분 안에 처리
 # 같은 글 두 번 안 보냄: 보낸 글 주소·내용 지문·메시지 지문을 kiwoom-auto-trader app-data 의 digest/threads_tg_state.json 에 바로바로 적음
 # 코드는 비공개 창고(kiwoom-auto-trader)에서 그때그때 받아 쓰고, 결과(요약·보낸 글 기록)도 그쪽 app-data 에 쓴다.
 # 필요한 비밀값: KIWOOM_TOKEN(kiwoom-auto-trader 읽기·쓰기 토큰), TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, GEMINI_API_KEY, THREADS_COOKIES(있으면), APP_KEY_MOCK·APP_SECRET_MOCK(키움 모의투자 열쇠, 스레드 그림 B/S 바로 넣기)
@@ -63,7 +63,7 @@ jobs:
           tg = get("digest/threads_tg_state.json")
           done = set(tg.get("slots", []))
           due, soon = [], []
-          for h, m in ((8, 0), (10, 0), (11, 30), (17, 30), (22, 0)):          # digest/run.py THREADS_SLOTS 와 같게
+          for h, m in ((8, 0), (17, 30)):          # digest/run.py THREADS_SLOTS 와 같게
               t = now.replace(hour=h, minute=m, second=0, microsecond=0)
               if f"{t:%Y-%m-%d %H:%M}" in done or now >= t + timedelta(hours=3):
                   continue
