@@ -35,7 +35,7 @@ jobs:
         run: |
           # GITHUB_REPOSITORY 는 env: 로는 못 바꿔서 여기서 (threads 와 같음)
           export GITHUB_REPOSITORY=ellabot7/kiwoom-auto-trader GITHUB_TOKEN="$TOKEN" MORE_FLAG="$RUNNER_TEMP/more"
-          python -m digest.ytsum
+          python -u -m digest.ytsum   # -u: 시간 초과로 끊겨도 어디서 멈췄는지 기록이 남게 (2026-11-10)
       - name: 다음 차례 부르기 (GitHub 예약이 몇 시간씩 늦어서, 남은 예전 영상이 있을 때만)
         env:
           GH_TOKEN: ${{ github.token }}
